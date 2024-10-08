@@ -94,38 +94,37 @@ func getSeqFunc(cmd *cobra.Command, args []string) {
 		line := openF.Text()
 		if string(line[0]) == "A" || string(line[0]) == "T" || string(line[0]) == "G" ||
 			string(line[0]) == "C" {
-			extractID = append(extractID, line)
-		}
-		if string(line[0]) == ">" {
 			seqID = append(seqID, line)
 		}
-
-		type extractSeq struct {
-			id  string
-			seq string
+		if string(line[0]) == ">" {
+			extractID = append(extractID, line)
 		}
+	}
+	type extractSeq struct {
+		id  string
+		seq string
+	}
 
-		storeSeq := []extractSeq{}
-		for i := range extractID {
-			for j := range refIdenStart {
-				if refID[i] == extractID[j] {
-					storeSeq = append(storeSeq, extractSeq{
-						id:  extractID[j],
-						seq: seqID[i][int(refIdenStart[j]):int(refIdenEnd[j])],
-					})
-				}
+	storeSeq := []extractSeq{}
+	for i := range extractID {
+		for j := range refIdenStart {
+			if extractID[i] == refID[j] {
+				storeSeq = append(storeSeq, extractSeq{
+					id:  extractID[j],
+					seq: seqID[j][int(refIdenStart[i]):int(refIdenEnd[i])],
+				})
 			}
 		}
+	}
 
-		file, err := os.Create("sequencesannotation.txt")
+	file, err := os.Create("sequencesannotation.txt")
+	if err != nil {
+		log.Fatal(err)
+	}
+	for i := range storeSeq {
+		_, err := file.WriteString(">" + storeSeq[i].id + "\n" + storeSeq[i].seq)
 		if err != nil {
 			log.Fatal(err)
-		}
-		for i := range storeSeq {
-			_, err := file.WriteString(">" + storeSeq[i].id + "\n" + storeSeq[i].seq)
-			if err != nil {
-				log.Fatal(err)
-			}
 		}
 	}
 }
