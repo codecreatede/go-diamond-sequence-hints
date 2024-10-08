@@ -4,7 +4,7 @@ package main
 
 Author Gaurav Sablok
 Universitat Potsdam
-Date 2024-10-4
+Date 2024-10-8
 
 Getting the aligned HSPs from the sequences so that you can use them for the annotations or tags generation.
 
