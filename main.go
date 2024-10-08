@@ -30,6 +30,8 @@ func main() {
 var (
 	alignmentfile  string
 	referencefasta string
+	upstreamStart  int
+	downstreamEnd  int
 )
 
 var rootCmd = &cobra.Command{
@@ -43,13 +45,28 @@ var alignmentCmd = &cobra.Command{
 	Run:  getSeqFunc,
 }
 
+var promoteralignmentCmd = &cobra.Command{
+	Use:  "UpStream Aligner",
+	Long: "specific for the genome alignment regions upstream and the downstream of the alignments",
+	Run:  upstreamFunc,
+}
+
 func init() {
 	alignmentCmd.Flags().
 		StringVarP(&alignmentfile, "alignmentfile", "a", "alignment file to be analyzed", "alignment")
 	alignmentCmd.Flags().
 		StringVarP(&referencefasta, "referencefasta", "p", "pacbio reads file", "pacbio file")
+	promoteralignmentCmd.Flags().
+		StringVarP(&alignmentfile, "alignmentfile", "a", "alignment file to be analyzed", "alignment")
+	promoteralignmentCmd.Flags().
+		StringVarP(&referencefasta, "referencefasta", "p", "pacbio reads file", "pacbio file")
+	promoteralignmentCmd.Flags().
+		IntVarP(&upstreamStart, "upstream of the hsp tags", "u", 4, "upstream tags")
+	promoteralignmentCmd.Flags().
+		IntVarP(&downstreamEnd, "downstream of the hsp tags", "d", 5, "downstream tags")
 
 	rootCmd.AddCommand(alignmentCmd)
+	rootCmd.AddCommand(promoteralignmentCmd)
 }
 
 func getSeqFunc(cmd *cobra.Command, args []string) {
@@ -80,6 +97,100 @@ func getSeqFunc(cmd *cobra.Command, args []string) {
 		alignIdenEnd = append(alignIdenEnd, end2)
 	}
 
+	seqIDType, seqSeqType := readRef()
+
+	type extractSeq struct {
+		extractPartID  string
+		extractPartSeq string
+	}
+
+	extractPartSeq := []extractSeq{}
+
+	for i := range seqIDType {
+		for j := range refID {
+			if seqIDType[i] == refID[j] {
+				extractPartSeq = append(extractPartSeq, extractSeq{
+					extractPartID:  seqIDType[i],
+					extractPartSeq: seqSeqType[i][int(refIdenStart[j]):int(refIdenEnd[j])],
+				})
+			}
+		}
+	}
+
+	file, err := os.Create("sequences-annotation.txt")
+	if err != nil {
+		log.Fatal(err)
+	}
+	for i := range extractPartSeq {
+		_, err := file.WriteString(">" + extractPartSeq[i].extractPartID + "\n" + extractPartSeq[i].extractPartSeq + "\n")
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+}
+
+func upstreamFunc(cmd *cobra.Command, args []string) {
+	refID := []string{}
+	alignID := []string{}
+	refIdenStart := []float64{}
+	refIdenEnd := []float64{}
+	alignIdenStart := []float64{}
+	alignIdenEnd := []float64{}
+	fOpen, err := os.Open(alignmentfile)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fRead := bufio.NewScanner(fOpen)
+
+	for fRead.Scan() {
+		line := fRead.Text()
+		refID = append(refID, strings.Split(string(line), "\t")[0])
+		alignID = append(alignID, strings.Split(string(line), "\t")[1])
+		start1, _ := strconv.ParseFloat(strings.Split(string(line), "\t")[6], 32)
+		end1, _ := strconv.ParseFloat(strings.Split(string(line), "\t")[7], 32)
+		start2, _ := strconv.ParseFloat(strings.Split(string(line), "\t")[8], 32)
+		end2, _ := strconv.ParseFloat(strings.Split(string(line), "\t")[9], 32)
+		refIdenStart = append(refIdenStart, start1)
+		refIdenEnd = append(refIdenEnd, end1)
+		alignIdenStart = append(alignIdenStart, start2)
+		alignIdenEnd = append(alignIdenEnd, end2)
+	}
+
+	seqIDType, seqSeqType := readRef()
+
+	type extractStreamSeq struct {
+		extractStreamPartID  string
+		extractStreamPartSeq string
+	}
+
+	extractupstreamPartSeq := []extractStreamSeq{}
+
+	for i := range seqIDType {
+		for j := range refID {
+			if seqIDType[i] == refID[j] {
+				extractupstreamPartSeq = append(extractupstreamPartSeq, extractStreamSeq{
+					extractStreamPartID:  seqIDType[i],
+					extractStreamPartSeq: seqSeqType[i][int(int(refIdenStart[j])-upstreamStart):int(downstreamEnd+int(refIdenEnd[j]))],
+				})
+			}
+		}
+
+		file, err := os.Create("sequences-annotation-upstream-downstream.txt")
+		if err != nil {
+			log.Fatal(err)
+		}
+		for i := range extractupstreamPartSeq {
+			_, err := file.WriteString(">" + extractupstreamPartSeq[i].extractStreamPartID + "\n" + extractupstreamPartSeq[i].extractStreamPartSeq + "\n")
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+	}
+}
+
+func readRef() ([]string, []string) {
+
 	extractID := []string{}
 	seqID := []string{}
 
@@ -97,34 +208,8 @@ func getSeqFunc(cmd *cobra.Command, args []string) {
 			seqID = append(seqID, line)
 		}
 		if string(line[0]) == ">" {
-			extractID = append(extractID, line)
+			extractID = append(extractID, strings.ReplaceAll(string(line), ">", ""))
 		}
 	}
-	type extractSeq struct {
-		id  string
-		seq string
-	}
-
-	storeSeq := []extractSeq{}
-	for i := range extractID {
-		for j := range refIdenStart {
-			if extractID[i] == refID[j] {
-				storeSeq = append(storeSeq, extractSeq{
-					id:  extractID[j],
-					seq: seqID[j][int(refIdenStart[i]):int(refIdenEnd[i])],
-				})
-			}
-		}
-	}
-
-	file, err := os.Create("sequencesannotation.txt")
-	if err != nil {
-		log.Fatal(err)
-	}
-	for i := range storeSeq {
-		_, err := file.WriteString(">" + storeSeq[i].id + "\n" + storeSeq[i].seq)
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
+	return extractID, seqID
 }
